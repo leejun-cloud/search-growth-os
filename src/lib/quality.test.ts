@@ -6,7 +6,47 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { similarity, titleTokens, tokenWeights, topicSimilarity } from "./quality";
+import { keywordDensity, similarity, titleTokens, tokenWeights, topicSimilarity } from "./quality";
+
+// ---------- 본문 유사도 / 검색어 밀도 (PR #2, onyouk0327-coder) ----------
+
+describe("similarity", () => {
+  it("동일 문서는 1", () => {
+    assert.equal(similarity("same text", "same text"), 1);
+  });
+
+  it("완전히 다른 문서는 0", () => {
+    assert.equal(similarity("abcdefg", "xyz123"), 0);
+  });
+
+  it("일부만 겹치면 0과 1 사이", () => {
+    const sim = similarity("daejeon companion cost", "busan companion cost");
+    assert.ok(sim > 0 && sim < 1);
+  });
+
+  it("지역명만 바꾸면 유사도가 45% 기준을 넘는다 — Template Family 검사가 이걸 잡아야 하는 이유", () => {
+    const base = "our companion service helps elderly visit hospitals in daejeon";
+    const s = similarity(base, base.replace("daejeon", "busan"));
+    assert.ok(s > 0.45);
+  });
+});
+
+describe("keywordDensity", () => {
+  it("검색어가 없으면 0", () => {
+    assert.equal(keywordDensity("companion service", "cost"), 0);
+  });
+
+  it("검색어로 도배되면 1에 가까움", () => {
+    assert.equal(keywordDensity("costcostcost", "cost"), 1);
+  });
+
+  it("자연스러운 밀도는 5% 미만", () => {
+    const filler = "our hospital visit assistance in the city area is available every weekday from nine to six. ";
+    const body = filler.repeat(16) + "our companion service helps you book easily.";
+    const d = keywordDensity(body, "companion");
+    assert.ok(d < 0.05);
+  });
+});
 
 /** 실제 사이트에서 가져온 제목들. 24편 블로그의 축약 말뭉치. */
 const CORPUS = [

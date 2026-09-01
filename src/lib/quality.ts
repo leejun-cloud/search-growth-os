@@ -5,7 +5,7 @@
 
 import { db } from "./db";
 import { newId, nowIso } from "./types";
-import type { CheckSeverity, PageDoc, QualityCheckItem, QualityReport } from "./types";
+import type { CheckSeverity, QualityCheckItem, QualityReport } from "./types";
 
 // ---------- 유사도: 문자 5-gram 셔글(shingle) 자카드 계수 ----------
 // 한국어는 공백 단어 단위가 부정확해 문자 n-gram을 쓴다.
@@ -84,7 +84,7 @@ function check(rule: string, pass: boolean, severity: CheckSeverity, detail: str
   return { rule, pass, severity, detail };
 }
 
-function keywordDensity(body: string, query: string): number {
+export function keywordDensity(body: string, query: string): number {
   if (!query.trim()) return 0;
   const clean = body.replace(/\s+/g, " ");
   const count = clean.split(query).length - 1;
@@ -95,14 +95,19 @@ function keywordDensity(body: string, query: string): number {
 export async function runQualityGate(pageId: string): Promise<QualityReport> {
   const page = await db.pages.get(pageId);
   if (!page) throw new Error("page not found");
+  const site = await db.sites.get(page.siteId);
+  // 사이트별 기준 조정(PR #2, onyouk0327-coder) — 기본값은 기존과 동일
+  const q = site?.thresholds?.quality ?? {
+    minBodyChars: 800, thinBlockChars: 500, maxSimilarity: 0.6, maxFamilySimilarity: 0.45, maxKeywordDensity: 0.05,
+  };
   const siblings = (await db.pages.bySite(page.siteId)).filter((p) => p.id !== page.id);
 
   const checks: QualityCheckItem[] = [];
   const bodyLen = page.body.replace(/\s+/g, "").length;
 
   // 1) thin content — 본문 분량
-  checks.push(check("thin_content", bodyLen >= 800, bodyLen < 500 ? "block" : "warn",
-    `본문 ${bodyLen}자 (기준: 800자 이상 권장, 500자 미만 차단)`));
+  checks.push(check("thin_content", bodyLen >= q.minBodyChars, bodyLen < q.thinBlockChars ? "block" : "warn",
+    `본문 ${bodyLen}자 (기준: ${q.minBodyChars}자 이상 권장, ${q.thinBlockChars}자 미만 차단)`));
 
   // 2) 제목/설명 길이와 존재
   checks.push(check("seo_title_length", page.seoTitle.length > 0 && page.seoTitle.length <= 60, "warn",
@@ -126,8 +131,8 @@ export async function runQualityGate(pageId: string): Promise<QualityReport> {
     const sim = similarity(page.body, p.body);
     if (sim > worstSim) { worstSim = sim; worstSlug = p.slug; }
   }
-  checks.push(check("near_duplicate", worstSim < 0.6, worstSim >= 0.8 ? "block" : worstSim >= 0.6 ? "block" : "info",
-    worstSim > 0 ? `최대 유사도 ${(worstSim * 100).toFixed(0)}% (vs ${worstSlug}) — 60% 이상 차단` : "유사 페이지 없음"));
+  checks.push(check("near_duplicate", worstSim < q.maxSimilarity, worstSim >= q.maxSimilarity ? "block" : "info",
+    worstSim > 0 ? `최대 유사도 ${(worstSim * 100).toFixed(0)}% (vs ${worstSlug}) — ${Math.round(q.maxSimilarity * 100)}% 이상 차단` : "유사 페이지 없음"));
 
   // 4-b) 주제 중복 — 같은 검색어를 노리는 형제 페이지
   //      본문 셔글(4번)이 놓치는 "다시 쓴 같은 글"을 제목으로 잡는다.
@@ -151,14 +156,14 @@ export async function runQualityGate(pageId: string): Promise<QualityReport> {
   if (family.length >= 2) {
     const sims = family.map((p) => similarity(page.body, p.body));
     const avg = sims.reduce((a, b) => a + b, 0) / sims.length;
-    checks.push(check("template_family_similarity", avg < 0.45, "block",
-      `같은 타입(${page.pageType}) ${family.length}개 페이지와 평균 유사도 ${(avg * 100).toFixed(0)}% — 45% 이상이면 지역명 치환형 대량 생성으로 판단해 차단`));
+    checks.push(check("template_family_similarity", avg < q.maxFamilySimilarity, "block",
+      `같은 타입(${page.pageType}) ${family.length}개 페이지와 평균 유사도 ${(avg * 100).toFixed(0)}% — ${Math.round(q.maxFamilySimilarity * 100)}% 이상이면 지역명 치환형 대량 생성으로 판단해 차단`));
   }
 
   // 6) keyword stuffing — 목표 검색어 과다 반복
   const density = keywordDensity(page.body, page.targetQuery);
-  checks.push(check("keyword_stuffing", density < 0.05, density >= 0.08 ? "block" : "warn",
-    `검색어 밀도 ${(density * 100).toFixed(1)}% (5% 미만 권장)`));
+  checks.push(check("keyword_stuffing", density < q.maxKeywordDensity, density >= q.maxKeywordDensity + 0.03 ? "block" : "warn",
+    `검색어 밀도 ${(density * 100).toFixed(1)}% (${Math.round(q.maxKeywordDensity * 100)}% 미만 권장)`));
 
   // 7) orphan 방지 — 내부링크 존재 (사이트 첫 페이지는 예외)
   const hasLinks = page.internalLinks.length >= 1 || siblings.length === 0;

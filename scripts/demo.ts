@@ -29,7 +29,10 @@ async function main() {
     audiences: ["중소기업"],
     conversionGoals: ["상담 문의"],
     autoPublishAllowed: false,
-    thresholds: { autoDraft: 80, reviewQueue: 65, enrich: 50 },
+    thresholds: {
+      autoDraft:80, reviewQueue:65, enrich:50,
+      quality: { minBodyChars:800, thinBlockChars:500, maxSimilarity:0.6, maxFamilySimilarity:0.45, maxKeywordDensity:0.05 },
+    },
     pilotCriteria: { weeks: 8, minIndexRate: 70, minQueryCount: 50 },
     createdAt: nowIso(),
   };

@@ -13,6 +13,7 @@ import { generateDraft } from "@/lib/factory";
 import { runQualityGate } from "@/lib/quality";
 import { publishPage, regenerateFeeds } from "@/lib/publish";
 import { importGscCsv } from "@/lib/analytics";
+import { importGscApi } from "@/lib/searchconsole";
 import { runGrowthAgent } from "@/lib/growth";
 import { newId, nowIso } from "@/lib/types";
 import type { Intent, Opportunity, Site } from "@/lib/types";
@@ -29,7 +30,10 @@ export async function createSiteAction(formData: FormData): Promise<void> {
     audiences: [],
     conversionGoals: splitList(formData.get("conversionGoals")),
     autoPublishAllowed: false,
-    thresholds: { autoDraft: 80, reviewQueue: 65, enrich: 50 },
+    thresholds: {
+      autoDraft:80, reviewQueue:65, enrich:50,
+      quality: { minBodyChars:800, thinBlockChars:500, maxSimilarity:0.6, maxFamilySimilarity:0.45, maxKeywordDensity:0.05 },
+    },
     pilotCriteria: { weeks: 8, minIndexRate: 70, minQueryCount: 50 },
     createdAt: nowIso(),
   };
@@ -121,6 +125,12 @@ export async function importCsvAction(siteId: string, formData: FormData): Promi
   if (!file || file.size === 0) throw new Error("CSV 파일을 선택하세요.");
   const text = await file.text();
   await importGscCsv(siteId, text, period);
+  revalidatePath(`/sites/${siteId}/analytics`);
+}
+
+export async function importGscApiAction(siteId: string, formData: FormData): Promise<void> {
+  const days = Math.max(7, Math.min(90, Number(formData.get("days")) || 28));
+  await importGscApi(siteId, days);
   revalidatePath(`/sites/${siteId}/analytics`);
 }
 
