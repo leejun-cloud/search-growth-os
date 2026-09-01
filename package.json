@@ -9,6 +9,7 @@
     "lint": "eslint",
     "sql": "tsx scripts/sql.ts",
     "demo": "tsx scripts/demo.ts",
+    "pilot": "tsx scripts/pilot.ts",
     "test": "tsx --test src/lib/*.test.ts"
   },
   "dependencies": {

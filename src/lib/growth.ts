@@ -7,7 +7,7 @@ import { newId, nowIso } from "./types";
 import type { GrowthAction, GrowthActionType } from "./types";
 
 // 게재순위별 기대 CTR (대략적 업계 곡선 — 판단 기준선으로만 사용)
-function expectedCtr(position: number): number {
+export function expectedCtr(position: number): number {
   if (position <= 1) return 0.28;
   if (position <= 3) return 0.11;
   if (position <= 5) return 0.06;

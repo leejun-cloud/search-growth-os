@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "검색 유입을 만들어내는 성장 시스템 — 멀티테넌트 SEO/GEO 엔진",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko" className="h-full antialiased">
       <body className="min-h-full bg-zinc-50 text-zinc-900">

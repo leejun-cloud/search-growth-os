@@ -49,13 +49,46 @@ class MockProvider implements AIProvider {
   }
 }
 
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+/** OpenRouter API를 직접 호출하는 프로바이더 — OPENROUTER_API_KEY 환경변수 필요. */
+class OpenRouterProvider implements AIProvider {
+  name = "openrouter";
+  async generateText(prompt: string): Promise<string> {
+    const key = process.env.OPENROUTER_API_KEY;
+    if (!key) throw new Error("OPENROUTER_API_KEY 환경변수가 필요합니다.");
+    const model = process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
+    const res = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`OpenRouter API 오류: ${res.status} ${await res.text()}`);
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error("OpenRouter 응답에 content가 없습니다.");
+    return content.trim();
+  }
+}
+
 let provider: AIProvider | null = null;
 
 export function getAI(): AIProvider {
   if (provider) return provider;
   const name = process.env.SGO_AI ?? "claude-cli";
   provider =
-    name === "codex-cli" ? new CodexCliProvider()
+    name === "openrouter" ? new OpenRouterProvider()
+    : name === "codex-cli" ? new CodexCliProvider()
     : name === "mock" ? new MockProvider()
     : new ClaudeCliProvider();
   return provider;

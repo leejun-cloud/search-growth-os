@@ -166,7 +166,7 @@ export async function regenerateFeeds(siteId: string): Promise<string[]> {
   return written;
 }
 
-function escapeXml(s: string): string {
+export function escapeXml(s: string): string {
   return s.replace(/[<>&'"]/g, (c) =>
     ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c] as string)
   );
