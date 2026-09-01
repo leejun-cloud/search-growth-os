@@ -39,11 +39,19 @@ export interface Site {
   audiences: string[];
   conversionGoals: string[];
   autoPublishAllowed: boolean;
-  // Page Qualification 정책 (PRD §10) — 사이트별 조정 가능
+// Page Qualification 정책 (PRD §10) — 사이트별 조정 가능
   thresholds: {
     autoDraft: number; // 기본 80
     reviewQueue: number; // 기본 65
     enrich: number; // 기본 50
+    // pSEO Quality Gate 기준 (PRD §14) — 파일럿 성과 데이터로 보정해 사이트별 조정
+    quality: {
+      minBodyChars: number; // 본문 권장 글자수 (기본 800)
+      thinBlockChars: number; // 이 미만이면 차단 (기본 500)
+      maxSimilarity: number; // 기존 페이지와 본문 유사도 상한 (기본 0.6)
+      maxFamilySimilarity: number; // 같은 타입 묶음 평균 유사도 상한 (기본 0.45)
+      maxKeywordDensity: number; // 검색어 밀도 상한 (기본 0.05)
+    };
   };
   // 파일럿 합격/불합격 기준
   pilotCriteria: {

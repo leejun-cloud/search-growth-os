@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db";
 import { evaluatePilot } from "@/lib/analytics";
-import { importCsvAction } from "@/app/actions";
+import { importCsvAction, importGscApiAction } from "@/app/actions";
 import { Badge, SubmitButton } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +31,26 @@ export default async function AnalyticsPage({ params }: { params: Promise<{ site
           <span>총 클릭 <b>{pilot.totalClicks.toLocaleString()}</b></span>
           <span className="text-zinc-400">판정 기간: 발행 후 {pilot.criteria.weeks}주</span>
         </div>
+      </section>
+
+      {/* GSC API 자동 import */}
+      <section className="rounded-lg border border-zinc-200 bg-white p-5">
+        <h2 className="mb-1 font-semibold">Google Search Console API 가져오기 (실측 검색수요)</h2>
+        <p className="mb-3 text-sm text-zinc-500">
+          서비스 계정 인증(<code>SGO_GSC_CLIENT_EMAIL</code> / <code>SGO_GSC_PRIVATE_KEY</code>)이 설정되어 있으면
+          검색어별 <b>실제 노출/클릭/순위</b>를 자동으로 가져옵니다. (미설정 시 CSV 업로드를 사용하세요.)
+        </p>
+        <form action={importGscApiAction.bind(null, siteId)} className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            기간
+            <select name="days" defaultValue="28" className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm">
+              <option value="7">7일</option>
+              <option value="28">28일</option>
+              <option value="90">90일</option>
+            </select>
+          </label>
+          <SubmitButton pendingText="GSC에서 가져오는 중…" variant="secondary">GSC API 가져오기</SubmitButton>
+        </form>
       </section>
 
       {/* CSV import */}
