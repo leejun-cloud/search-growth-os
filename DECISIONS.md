@@ -419,6 +419,15 @@ North Star:
 
 ---
 
+## 21-1. Page Factory / Quality Gate 보강 결정 (2026-08-27, db.nolgong.app 파일럿 중 확정)
+
+pSEO Quality Gate는 개별 페이지의 근접 중복(near-duplicate)만 검사해서는 부족하다. **같은 배치 안에서 페이지 "구조" 자체가 반복되는 것도 대량생성 패턴으로 봐야 한다** — 문장이 달라도 히어로+카드3개+3단계+CTA 구조를 N번 복제하면 Template Family 유사도 검사와 별개로 "구조적 thin content"가 된다.
+
+확정 사항:
+1. **Page Factory는 페이지 타입마다 최소 3~4종의 서로 다른 레이아웃 셰이프를 가져야 한다** (예: 랜딩형, 산문 가이드형, 비교표형, 서사형 사례, FAQ 아코디언형). 같은 page_type이라도 항상 같은 셰이프를 쓰지 않는다.
+2. **Research Agent는 Fact Pack을 만들 때 목표 검색어의 실제 상위노출 결과를 조사(웹서치)해서 competitorGaps 필드에 반영해야 한다** — 이미 PRD §12에 필드는 있었으나, "왜/언제 조사하는가"가 이번에 확정됐다: 배치 생성 시작 전, 대표 검색어 2~3개를 실제로 검색해 형식·다루는 내용을 확인한다. 외부에서 나온 통계/사례는 Fact Pack의 verifiedFacts가 아니라 별도로 "외부 사례(출처 명시)"로 태깅해서, Writer Agent가 우리 실적처럼 쓰지 않도록 한다.
+3. Quality Gate에 향후 추가할 체크: 같은 배치 내 레이아웃 구조(섹션 순서/개수) 유사도 검사(현재는 본문 텍스트 유사도만 검사함 — `src/lib/quality.ts`의 `similarity()`는 텍스트 shingle 기반이라 구조 반복은 못 잡는다. TODO로 남김).
+
 ## 21. 다음 구현 단계에서 해야 할 일
 
 1. 독립 repository 생성 가능 시 `search-growth-os/`를 별도 repo로 이동
