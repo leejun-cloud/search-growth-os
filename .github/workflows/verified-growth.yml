@@ -36,6 +36,7 @@ jobs:
         env:
           SGO_OPERATOR_TOKEN: ci-local-browser-verification-only
         run: |
+          trap 'agent-browser get url > evidence/browser-last-url.txt || true; agent-browser get text body > evidence/browser-last-body.txt || true; agent-browser screenshot --full evidence/browser-last.png || true' EXIT
           npm run start > evidence/server.log 2>&1 &
           for i in $(seq 1 40); do curl -fsS http://127.0.0.1:3000/ >/dev/null && break; sleep 1; done
           agent-browser open http://127.0.0.1:3000/sites/verification-demo/operations
@@ -49,22 +50,26 @@ jobs:
           grep -q '변경 전후 성과' evidence/operations.txt
           grep -q 'AI 인용 관측 기록' evidence/operations.txt
           agent-browser find label '질문에 대한 직답' fill '이 문장은 편집 기능을 검증하는 테스트 답변이며 실제 서비스 안내가 아닙니다.'
-          # The CLI text-fill command leaves native date inputs empty. Set the native date value and verify validity.
+          # The CLI text-fill command leaves native date inputs empty. Set and validate the native date value.
           agent-browser eval '(() => { const input=document.querySelector("[name=dataAsOf]"); const value=new Date().toISOString().slice(0,10); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,value); input.dispatchEvent(new Event("input",{bubbles:true})); input.dispatchEvent(new Event("change",{bubbles:true})); if(!input.checkValidity()||input.value!==value)throw new Error("Date fixture failed"); return input.value; })()'
           agent-browser find label '검토자' fill 'CI 편집 검증'
           agent-browser find label '확인한 출처 URL (한 줄에 하나)' fill 'https://developers.google.com/search/docs/appearance/ai-features'
           agent-browser eval '(() => {const form=document.querySelector("[name=directAnswer]").form;if(!form.checkValidity())throw new Error("Invalid edit form");return Array.from(form.elements).filter(e=>e.name&&!e.name.startsWith("$")).map(e=>({name:e.name,value:e.value,valid:e.validity?.valid}));})()' > evidence/edit-inputs.json
           agent-browser find role button click --name '콘텐츠에 반영하고 재검사'
-          agent-browser wait --url '**/p/verification-demo/verification-draft'
+          # Verify the rendered result and exact URL instead of the CLI's URL-glob matcher.
           agent-browser wait '[data-direct-answer]'
+          agent-browser get url > evidence/preview-url.txt
+          grep -Fxq 'http://127.0.0.1:3000/p/verification-demo/verification-draft' evidence/preview-url.txt
           agent-browser get text body > evidence/edited-preview.txt
           grep -q '이 문장은 편집 기능을 검증하는 테스트 답변' evidence/edited-preview.txt
           grep -q 'CI 편집 검증' evidence/edited-preview.txt
           agent-browser screenshot --full evidence/edited-preview.png
-          agent-browser close
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: verified-growth-evidence
           path: evidence/
           retention-days: 14
+      - name: Close browser
+        if: always()
+        run: agent-browser close || true
