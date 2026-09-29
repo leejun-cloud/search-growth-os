@@ -2,7 +2,7 @@
 import {revalidatePath} from 'next/cache';import {redirect} from 'next/navigation';
 import {requireOperator,unlockOperator} from '@/lib/operator-access';
 import {db} from '@/lib/db';import {newId,nowIso} from '@/lib/types';
-import {saveEvidence,listEvidence} from '@/lib/growth-store';
+import {saveEvidence} from '@/lib/growth-store';
 import {runOperations,latestOperation,validateCitation} from '@/lib/growth-operations';import type {CitationObservation,ChangeExperiment} from '@/lib/growth-operations';
 import {runQualityGate} from '@/lib/quality';import {runGrowthAgent} from '@/lib/growth';import {submitIndexNow} from '@/lib/indexnow';
 const text=(data:FormData,key:string,max=5000)=>String(data.get(key)??'').trim().slice(0,max);
@@ -24,6 +24,7 @@ export async function experimentAction(siteId:string,form:FormData){
 }
 export async function contentAction(siteId:string,form:FormData){
  await requireOperator();const page=await db.pages.get(text(form,'pageId',150));if(!page||page.siteId!==siteId)throw new Error('page not found for site');
+ console.info('[content-edit] start',{siteId,pageId:page.id});
  const answer=text(form,'directAnswer',2000),reviewer=text(form,'reviewer',150),asOf=text(form,'dataAsOf',10);
  if(!answer||!reviewer||!/^\d{4}-\d{2}-\d{2}$/.test(asOf)||!Number.isFinite(Date.parse(asOf))||asOf>nowIso().slice(0,10)||new Date(asOf).toISOString().slice(0,10)!==asOf)throw new Error('직답·검토자·실제 자료 기준일을 입력하세요.');
  const sources=text(form,'sources').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
@@ -31,7 +32,12 @@ export async function contentAction(siteId:string,form:FormData){
  const at=nowIso();await saveEvidence({id:newId('version'),siteId,kind:'page_version',target:page.id,createdAt:at,payload:page});
  await db.pages.put({...page,summary:answer,sources,status:'review',updatedAt:at});
  await saveEvidence({id:newId('profile'),siteId,kind:'content_profile',target:page.id,createdAt:at,payload:{directAnswer:answer,dataAsOf:asOf,reviewer,lastReviewedAt:at,sources}});
- await runQualityGate(page.id);refresh(siteId);revalidatePath(`/sites/${siteId}/pages/${page.id}`);
+ const quality=await runQualityGate(page.id);refresh(siteId);revalidatePath(`/sites/${siteId}/pages/${page.id}`);
+ const preview=`/p/${encodeURIComponent(siteId)}/${page.slug.split('/').map(encodeURIComponent).join('/')}`;
+ revalidatePath(preview);
+ console.info('[content-edit] saved',{siteId,pageId:page.id,quality:quality.verdict});
+ // Show the persisted result, not a silent form reset. This only opens a noindex preview.
+ redirect(preview);
 }
 export async function indexNowAction(siteId:string){
  await requireOperator();const site=await db.sites.get(siteId),operation=await latestOperation(siteId);

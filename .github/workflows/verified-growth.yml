@@ -51,9 +51,9 @@ jobs:
           agent-browser find label '실제 자료 기준일' fill "$(date -u +%F)"
           agent-browser find label '검토자' fill 'CI 편집 검증'
           agent-browser find label '확인한 출처 URL (한 줄에 하나)' fill 'https://developers.google.com/search/docs/appearance/ai-features'
+          agent-browser eval 'Array.from(document.querySelector("[name=directAnswer]").form.elements).filter(e=>e.name&&!e.name.startsWith("$" )).map(e=>({name:e.name,value:e.value,valid:e.validity?.valid,message:e.validationMessage}))' > evidence/edit-inputs.json
           agent-browser find role button click --name '콘텐츠에 반영하고 재검사'
-          agent-browser wait --load networkidle
-          agent-browser open http://127.0.0.1:3000/p/verification-demo/verification-draft
+          agent-browser wait --url '**/p/verification-demo/verification-draft'
           agent-browser wait '[data-direct-answer]'
           agent-browser get text body > evidence/edited-preview.txt
           grep -q '이 문장은 편집 기능을 검증하는 테스트 답변' evidence/edited-preview.txt
