@@ -2,9 +2,12 @@ name: Verified growth regression
 on:
   pull_request:
   push:
-    branches: [main, feat/evidence-growth-engine]
+    branches: [main]
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
@@ -17,7 +20,10 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Regression tests
-        run: mkdir -p evidence && npm test 2>&1 | tee evidence/tests.txt
+        run: |
+          set -o pipefail
+          mkdir -p evidence
+          npm test 2>&1 | tee evidence/tests.txt
       - name: TypeScript
         run: npx tsc --noEmit
       - name: Production build
@@ -26,7 +32,7 @@ jobs:
         run: npx tsx scripts/verify-growth-demo.ts
       - name: Install browser verifier
         run: npm install -g agent-browser && agent-browser install --with-deps
-      - name: Verify actual operations screen
+      - name: Verify operations screen and real edit-save-render flow
         env:
           SGO_OPERATOR_TOKEN: ci-local-browser-verification-only
         run: |
@@ -41,6 +47,18 @@ jobs:
           agent-browser get text body > evidence/operations.txt
           grep -q '변경 전후 성과' evidence/operations.txt
           grep -q 'AI 인용 관측 기록' evidence/operations.txt
+          agent-browser find label '질문에 대한 직답' fill '이 문장은 편집 기능을 검증하는 테스트 답변이며 실제 서비스 안내가 아닙니다.'
+          agent-browser find label '실제 자료 기준일' fill "$(date -u +%F)"
+          agent-browser find label '검토자' fill 'CI 편집 검증'
+          agent-browser find label '확인한 출처 URL (한 줄에 하나)' fill 'https://developers.google.com/search/docs/appearance/ai-features'
+          agent-browser find role button click --name '콘텐츠에 반영하고 재검사'
+          agent-browser wait --load networkidle
+          agent-browser open http://127.0.0.1:3000/p/verification-demo/verification-draft
+          agent-browser wait '[data-direct-answer]'
+          agent-browser get text body > evidence/edited-preview.txt
+          grep -q '이 문장은 편집 기능을 검증하는 테스트 답변' evidence/edited-preview.txt
+          grep -q 'CI 편집 검증' evidence/edited-preview.txt
+          agent-browser screenshot --full evidence/edited-preview.png
           agent-browser close
       - uses: actions/upload-artifact@v4
         if: always()
