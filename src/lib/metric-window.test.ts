@@ -1,0 +1,15 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { parseCtr, parsePeriod, comparisonWindows, selectMetricWindow } from './metric-window';
+import { csvMetrics } from './analytics';
+import type { SearchMetric } from './types';
+const metric=(periodLabel:string,source:SearchMetric['source']='gsc_api',dimension:SearchMetric['dimension']='query',clicks=2):SearchMetric=>({id:Math.random().toString(),siteId:'s',source,dimension,metricKey:'example',clicks,impressions:200,ctr:clicks/200,avgPosition:5,periodLabel,importedAt:'2026-09-29T01:00:00Z'});
+test('percent below or equal to one must not be interpreted as a ratio',()=>{assert.equal(parseCtr('0.5%'),0.005);assert.equal(parseCtr('1%'),0.01);assert.equal(parseCtr('1.2%'),0.012);assert.equal(parseCtr('0.005'),0.005);assert.throws(()=>parseCtr('NaN'));});
+test('CSV Korean click rate header cannot shadow click count',()=>{const {rows}=csvMetrics('s','검색어,클릭률,클릭수,노출수,평균 게재순위\n테스트,0.5%,1,200,5','2026-08-30 ~ 2026-09-26 28d');assert.equal(rows[0].clicks,1);assert.equal(rows[0].ctr,0.005);});
+test('invalid rows rejected before snapshot replacement',()=>{assert.throws(()=>csvMetrics('s','Query,Clicks,Impressions\nx,NaN,100','x'));assert.throws(()=>csvMetrics('s','Query,Clicks,Impressions\nx,100,1','x'));});
+test('strict period parsing rejects impossible calendar dates',()=>{assert.equal(parsePeriod('2026-02-30 ~ 2026-03-01'),null);assert.equal(parsePeriod('2026-09 28d'),null);assert.equal(parsePeriod('2026-08-30 ~ 2026-09-26 28d')?.days,28);});
+test('windows are inclusive, equal length, non-overlapping and Pacific dated',()=>{const w=comparisonWindows(new Date('2026-09-29T01:00:00Z'));assert.deepEqual(w.current,{startDate:'2026-08-29',endDate:'2026-09-25'});assert.equal(Date.parse(w.current.startDate)-Date.parse(w.previous.endDate),86400000);assert.throws(()=>comparisonWindows(new Date(),NaN));});
+test('never sum rolling 7,28,90-day windows or mix providers',()=>{const rows=[metric('2026-08-30 ~ 2026-09-26 28d'),metric('2026-08-02 ~ 2026-08-29 28d'),metric('2026-08-30 ~ 2026-09-26 28d','naver_csv'),metric('2026-08-30 ~ 2026-09-26 28d','gsc_api','page')];const w=selectMetricWindow(rows,new Date('2026-09-29'));assert.equal(w.rows.length,2);assert.equal(w.previous.length,1);assert.equal(w.status,'fresh');});
+test('reimported old data is stale even with a new import timestamp',()=>{assert.equal(selectMetricWindow([metric('2026-08-01 ~ 2026-08-28 28d')],new Date('2026-09-29')).status,'stale');});
+test('unknown dates and missing data never silently pass',()=>{assert.equal(selectMetricWindow([metric('August')]).status,'undated');assert.equal(selectMetricWindow([]).status,'missing');});
+test('duplicate imported keys do not inflate counts',()=>{const rows=[metric('2026-08-30 ~ 2026-09-26 28d'),metric('2026-08-30 ~ 2026-09-26 28d')];assert.equal(selectMetricWindow(rows,new Date('2026-09-29')).rows.length,1);});
