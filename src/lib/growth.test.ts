@@ -1,0 +1,5 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {measuredRecommendations} from './growth';import type {SearchMetric} from './types';
+const metric={id:'1',siteId:'s',source:'gsc_api',dimension:'page',metricKey:'https://example.com/guide',clicks:2,impressions:400,ctr:0.005,avgPosition:12,periodLabel:'2026-08-29 ~ 2026-09-25 28d',importedAt:'2026-09-29T00:00:00Z'} as SearchMetric;
+test('missing metrics request evidence instead of deleting pages',()=>{const r=measuredRecommendations([],new Date('2026-09-29'));assert.equal(r[0].action,'REQUEST_MORE_DATA');});
+test('stale metrics cannot trigger growth actions',()=>{const r=measuredRecommendations([metric],new Date('2026-11-01'));assert.equal(r[0].action,'REQUEST_MORE_DATA');});
+test('fresh observed page becomes an update candidate, never a fabricated new page',()=>{const r=measuredRecommendations([metric],new Date('2026-09-29'));assert.equal(r[0].action,'UPDATE');assert.equal(r[0].target,metric.metricKey);assert.ok(r.every(a=>!['DELETE','NOINDEX','MERGE','CREATE'].includes(a.action)));});

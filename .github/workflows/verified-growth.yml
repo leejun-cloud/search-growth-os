@@ -2,7 +2,7 @@ name: Verified growth regression
 on:
   pull_request:
   push:
-    branches: [main, fix/verified-growth-20260929]
+    branches: [main, feat/evidence-growth-engine]
 permissions:
   contents: read
 jobs:
@@ -16,6 +16,35 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: npm test
-      - run: npx tsc --noEmit
-      - run: npm run build
+      - name: Regression tests
+        run: mkdir -p evidence && npm test 2>&1 | tee evidence/tests.txt
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Production build
+        run: npm run build
+      - name: Read-only live site verification
+        run: npx tsx scripts/verify-growth-demo.ts
+      - name: Install browser verifier
+        run: npm install -g agent-browser && agent-browser install --with-deps
+      - name: Verify actual operations screen
+        env:
+          SGO_OPERATOR_TOKEN: ci-local-browser-verification-only
+        run: |
+          npm run start > evidence/server.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:3000/ >/dev/null && break; sleep 1; done
+          agent-browser open http://127.0.0.1:3000/sites/verification-demo/operations
+          agent-browser snapshot -i
+          agent-browser find label '운영자 암호' fill 'ci-local-browser-verification-only'
+          agent-browser find role button click --name '접속'
+          agent-browser wait '[data-testid="growth-operations"]'
+          agent-browser screenshot --full evidence/operations.png
+          agent-browser get text body > evidence/operations.txt
+          grep -q '변경 전후 성과' evidence/operations.txt
+          grep -q 'AI 인용 관측 기록' evidence/operations.txt
+          agent-browser close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verified-growth-evidence
+          path: evidence/
+          retention-days: 14
