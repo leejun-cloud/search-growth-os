@@ -1,7 +1,7 @@
 // Export is not publishing. A successful webhook is not proof of a readable public page.
 import {promises as fs} from 'node:fs';import path from 'node:path';
-import {db} from './db';import {nowIso,newId} from './types';import type {PageDoc,Site} from './types';
-import {runQualityGate} from './quality';import {verifyLivePage} from './live-verification';import type {LiveReport} from './live-verification';
+import {db} from './db';import {nowIso,newId} from './types';
+import {runQualityGate} from './quality';import {verifyPublishedRevision} from './publication-verification';import type {LiveReport} from './live-verification';
 import {saveEvidence} from './growth-store';
 export interface PublishResult {ok:boolean;adapter:string;location:string;message?:string;stage?:'exported'|'verified'|'blocked'|'unverified'}
 const publishDir=(siteId:string)=>path.join(process.cwd(),'data','published',siteId);
@@ -11,14 +11,12 @@ export function deliveryState(adapter:string,accepted:boolean,verification?:Pick
 async function receipt(siteId:string,pageId:string,result:PublishResult){await saveEvidence({id:newId('delivery'),siteId,kind:'delivery',target:pageId,createdAt:nowIso(),payload:{stage:result.stage??'blocked',message:result.message??'',location:result.location}});return result;}
 export async function publishPage(pageId:string):Promise<PublishResult>{
  const original=await db.pages.get(pageId);if(!original)throw new Error('page not found');const site=await db.sites.get(original.siteId);if(!site)throw new Error('site not found');
- // Always re-check the current body: a stale quality report must not authorize a changed draft.
  const quality=await runQualityGate(pageId);
  if(quality.verdict==='block')return receipt(site.id,pageId,{ok:false,adapter:'-',location:'',stage:'blocked',message:'현재 본문이 품질검사에서 차단됐습니다.'});
  const page=(await db.pages.get(pageId))!;
  const endpoint=process.env.SGO_PUBLISH_ENDPOINT;
  if(!endpoint){
   const dir=publishDir(site.id);await fs.mkdir(dir,{recursive:true});
-  // Export under the internal ID, not an untrusted slug used as a filesystem path.
   const basename=page.id.replace(/[^a-zA-Z0-9_-]/g,'_');const location=path.join(dir,basename+'.json');
   await fs.writeFile(location,JSON.stringify(page,null,2),'utf8');
   await fs.writeFile(path.join(dir,basename+'.md'),`---\ntitle: ${JSON.stringify(page.seoTitle)}\nslug: ${JSON.stringify(page.slug)}\n---\n\n# ${page.h1}\n\n${page.summary}\n\n${page.body}\n`,'utf8');
@@ -31,7 +29,7 @@ export async function publishPage(pageId:string):Promise<PublishResult>{
  try{
   const response=await fetch(endpoint,{method:'POST',redirect:'manual',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.SGO_PUBLISH_SECRET}`},body:JSON.stringify(page)});
   if(!response.ok)return receipt(site.id,pageId,{ok:false,adapter:'nextjs-webhook',location,stage:'blocked',message:`게시 요청 실패: HTTP ${response.status}`});
-  const verification=await verifyLivePage(site.domain,location,{title:page.seoTitle,h1:page.h1,answer:page.summary});
+  const verification=await verifyPublishedRevision(site,page);
   await saveEvidence({id:newId('verify'),siteId:site.id,kind:'verification',target:location,createdAt:verification.checkedAt,payload:verification});
   const stage=deliveryState('nextjs-webhook',true,verification);
   if(stage!=='verified')return receipt(site.id,pageId,{ok:false,adapter:'nextjs-webhook',location,stage:'unverified',message:'게시 API는 수락했지만 실제 URL의 새 본문·정본·검색 허용을 확인하지 못했습니다. 게시 완료로 처리하지 않았습니다.'});
@@ -46,7 +44,7 @@ export async function regenerateFeeds(siteId:string):Promise<string[]>{
  const urls=pages.filter(p=>p.indexPolicy==='index').map(p=>({loc:p.canonicalUrl??`${origin}/${p.slug}`,lastmod:p.updatedAt.slice(0,10),title:p.seoTitle,description:p.metaDescription}));
  const sitemap=`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u=>`<url><loc>${escapeXml(u.loc)}</loc><lastmod>${u.lastmod}</lastmod></url>`).join('\n')}\n</urlset>`;
  const rss=`<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel><title>${escapeXml(site.name)}</title><link>${escapeXml(origin)}</link><description>${escapeXml(site.name)}</description>${urls.map(u=>`<item><title>${escapeXml(u.title)}</title><link>${escapeXml(u.loc)}</link><description>${escapeXml(u.description)}</description></item>`).join('')}</channel></rss>`;
- // These are export files. They are NOT automatically installed on the target host.
+ // These are export files, not a deployment to the target host.
  const files=[['sitemap.xml',sitemap],['rss.xml',rss],['llms.txt',`# ${site.name}\n\n${urls.map(u=>`- [${u.title}](${u.loc})`).join('\n')}`]];
  const written:string[]=[];for(const [name,content] of files){const filename=path.join(dir,name);await fs.writeFile(filename,content,'utf8');written.push(filename);}return written;
 }
